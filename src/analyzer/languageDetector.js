@@ -155,15 +155,22 @@ export function detectLanguage(projectPath) {
 
 function detectByExtensions(projectPath) {
   const counts = {}
-  try {
-    const entries = readdirSync(projectPath, { withFileTypes: true })
-    for (const entry of entries) {
-      if (entry.isFile()) {
-        const ext = extname(entry.name)
-        if (ext) counts[ext] = (counts[ext] || 0) + 1
+  const IGNORED = new Set(['.git', 'node_modules', 'vendor', 'target', 'dist', 'build', 'out', '.gradle'])
+  function walk(dir, depth) {
+    if (depth > 6) return
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.isFile()) {
+          const ext = extname(entry.name)
+          if (ext) counts[ext] = (counts[ext] || 0) + 1
+        } else if (entry.isDirectory() && !IGNORED.has(entry.name)) {
+          walk(join(dir, entry.name), depth + 1)
+        }
       }
-    }
-  } catch { /* skip */ }
+    } catch { /* skip */ }
+  }
+  walk(projectPath, 0)
 
   const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
   if (!dominant) return { lang: 'Unknown', framework: 'Unknown', runtime: 'Unknown' }

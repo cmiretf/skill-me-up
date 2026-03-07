@@ -3,7 +3,7 @@ export const IGNORED_DIRS = new Set([
   'node_modules', 'vendor', 'venv', 'env', '.venv',
   // Build outputs
   'dist', 'build', 'out', 'target', '.next', '.nuxt', '__pycache__',
-  'bin', '.gradle', 'obj', 'coverage', '.nyc_output',
+  '.gradle', 'obj', 'coverage', '.nyc_output',
   // VCS & IDE
   '.git', '.svn', '.idea', '.vscode',
   // Cache & temp
@@ -28,4 +28,4 @@ export const CODE_EXTENSIONS = new Set([
 ])
 
 export const MIN_CODE_FILES = 1
-export const MAX_DEPTH = 3
+export const MAX_DEPTH = 6
