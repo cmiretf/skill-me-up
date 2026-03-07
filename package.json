@@ -1,0 +1,28 @@
+{
+  "name": "skill-me-up",
+  "version": "1.0.0",
+  "description": "Analyzes code projects and generates agent-ready instructions.md files inside each key folder",
+  "type": "module",
+  "main": "src/analyzer/index.js",
+  "bin": {
+    "skill-me-up": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js",
+    "dev": "node bin/cli.js ."
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "llm",
+    "code-analysis",
+    "documentation",
+    "markdown",
+    "developer-tools"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
