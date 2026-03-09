@@ -46,6 +46,16 @@ function buildMarkdown(folderInfo, patternInfo, languageInfo, projectMeta) {
   sections.push(description)
   sections.push('')
 
+  // ─── Project Conventions ─────────────────────────────────────────────────
+  if (patternInfo.conventions) {
+    const conventionsContent = buildConventionsSection(patternInfo.conventions)
+    if (conventionsContent) {
+      sections.push('## Project Conventions')
+      sections.push(conventionsContent)
+      sections.push('')
+    }
+  }
+
   // ─── Directory tree ──────────────────────────────────────────────────────
   const tree = buildFolderTree(folderInfo.path, relativePath)
   if (tree) {
@@ -255,9 +265,67 @@ function buildFilesSection(fileAnalysis, allCodeFiles) {
   return lines.join('\n')
 }
 
+// ─── Project Conventions Section ─────────────────────────────────────────────
+
+/**
+ * Renders the ## Project Conventions section from detected conventions data.
+ * Returns null when conventions is null or empty — caller must check before pushing.
+ * @param {Object|null} conventions - Conventions object from patternInfo.conventions
+ * @returns {string|null} Rendered bullet list or null
+ */
+function buildConventionsSection(conventions) {
+  if (!conventions || Object.keys(conventions).length === 0) return null
+
+  const IMPORT_LABELS = {
+    'relative-with-extension': 'relative paths with `.js` extension',
+    'relative-bare': 'relative paths without extension',
+    'absolute-bare': 'absolute/package paths',
+  }
+
+  const lines = []
+
+  // Methods — may be plain object or Array (multi-language with differing styles)
+  if (conventions.methods) {
+    if (Array.isArray(conventions.methods)) {
+      for (const entry of conventions.methods) {
+        lines.push(`- **Methods (${entry.lang})**: ${entry.style} (e.g. \`${entry.example}\`)`)
+      }
+    } else {
+      lines.push(`- **Methods**: ${conventions.methods.style} (e.g. \`${conventions.methods.example}\`)`)
+    }
+  }
+
+  // Classes — may be plain object or Array (multi-language with differing styles)
+  if (conventions.classes) {
+    if (Array.isArray(conventions.classes)) {
+      for (const entry of conventions.classes) {
+        lines.push(`- **Classes (${entry.lang})**: ${entry.style} (e.g. \`${entry.example}\`)`)
+      }
+    } else {
+      lines.push(`- **Classes**: ${conventions.classes.style} (e.g. \`${conventions.classes.example}\`)`)
+    }
+  }
+
+  // Files — always a plain object (not language-split)
+  if (conventions.files) {
+    lines.push(`- **Files**: ${conventions.files.style} (e.g. \`${conventions.files.example}\`)`)
+  }
+
+  // Imports — always a plain object (style key → human-readable label)
+  if (conventions.imports) {
+    const label = IMPORT_LABELS[conventions.imports.style] || conventions.imports.style
+    lines.push(`- **Imports**: ${label} (e.g. \`${conventions.imports.example}\`)`)
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function truncate(str, maxLen) {
   if (!str || str.length <= maxLen) return str
   return str.substring(0, maxLen - 3) + '...'
 }
+
+// ─── Test Exports ─────────────────────────────────────────────────────────────
+export { buildConventionsSection }
