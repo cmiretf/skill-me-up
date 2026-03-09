@@ -201,6 +201,7 @@ function extractKotlinMethods(content) {
       params: match[3].trim(),
       returnType: match[4] || 'Unit',
       annotation,
+      lineNumber: getLineNumber(content, match.index),
     })
   }
   return methods
@@ -237,7 +238,13 @@ function analyzeTypeScriptOrJs(content, file) {
   const fnRegex = /(?:export\s+(?:async\s+)?function\s+(\w+)|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\()/g
   let fn
   while ((fn = fnRegex.exec(content)) !== null) {
-    functions.push(fn[1] || fn[2])
+    functions.push({
+      name: fn[1] || fn[2],
+      params: '',
+      returnType: '',
+      annotation: null,
+      lineNumber: getLineNumber(content, fn.index),
+    })
   }
 
   // Detect decorators (NestJS, Angular, etc.)
@@ -264,7 +271,7 @@ function analyzeTypeScriptOrJs(content, file) {
     extendsClass: classMatch ? classMatch[3] || null : null,
     implementsInterfaces: classMatch && classMatch[4] ? classMatch[4].split(',').map(s => s.trim()) : [],
     classAnnotations: uniqueDecorators,
-    methods: functions.map(f => ({ name: f, params: '', returnType: '', annotation: null })),
+    methods: functions,
     fieldAnnotations: [],
     allAnnotations: uniqueDecorators,
   }
@@ -309,6 +316,7 @@ function analyzePython(content, file) {
         params: m[3].replace(/self,?\s*/, '').trim(),
         returnType: m[4] || '',
         annotation: m[1] || null,
+        lineNumber: getLineNumber(content, m.index),
       })
     }
   }
@@ -357,6 +365,7 @@ function analyzeGo(content, file) {
         params: fn[4].trim(),
         returnType: fn[5] || fn[6] || '',
         annotation: fn[2] ? `receiver: ${fn[2]}` : null,
+        lineNumber: getLineNumber(content, fn.index),
       })
     }
   }
@@ -401,6 +410,7 @@ function analyzeCSharp(content, file) {
       params: m[4].trim(),
       returnType: m[2] || 'void',
       annotation: m[1] || null,
+      lineNumber: getLineNumber(content, m.index),
     })
   }
 
@@ -441,6 +451,7 @@ function analyzePhp(content, file) {
       params: m[2].trim(),
       returnType: m[3] || '',
       annotation: null,
+      lineNumber: getLineNumber(content, m.index),
     })
   }
 
@@ -479,6 +490,7 @@ function analyzeRuby(content, file) {
         params: m[2] || '',
         returnType: '',
         annotation: null,
+        lineNumber: getLineNumber(content, m.index),
       })
     }
   }
@@ -859,6 +871,7 @@ function extractPublicMethods(content, language) {
         params: match[4].trim(),
         returnType: match[2] || 'void',
         annotation: match[1] ? match[1].replace(/\(.*\)/, '').trim() : null,
+        lineNumber: getLineNumber(content, match.index),
       })
     }
   }
@@ -880,6 +893,16 @@ function extractMatches(content, regex) {
 function extractFirst(content, regex) {
   const match = content.match(regex)
   return match ? match[1] : null
+}
+
+/**
+ * Computes 1-based line number of a match from its index in the content string.
+ * @param {string} content - Full file content
+ * @param {number} matchIndex - match.index from regex exec
+ * @returns {number} 1-based line number
+ */
+function getLineNumber(content, matchIndex) {
+  return content.substring(0, matchIndex).split('\n').length
 }
 
 // ─── Original functions (kept for backward compat) ───────────────────────────
@@ -974,3 +997,6 @@ function inferRoleFromFiles(fileAnalysis) {
   if (models.length > 0) return 'Data Model Layer'
   return 'General Module'
 }
+
+// ─── Test Exports (used only by tests/phase1/) ───────────────────────────────
+export { getLineNumber, analyzeJava, analyzeKotlin, analyzeTypeScriptOrJs, analyzePython, analyzeGo }
