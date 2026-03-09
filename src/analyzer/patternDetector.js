@@ -31,6 +31,9 @@ export function detectFolderPattern(folderInfo) {
   // Generate contextual "how to add" instructions
   const howToAdd = generateHowToAdd(deepAnalysis, detectedPatterns, matched)
 
+  // Detect naming conventions per folder (ENRICH-02)
+  const conventions = detectConventions(deepAnalysis, folderInfo.codeFiles)
+
   return {
     pattern: matched || null,
     role: matched?.role || inferRoleFromFiles(fileAnalysis),
@@ -43,6 +46,7 @@ export function detectFolderPattern(folderInfo) {
     howToAdd,
     hasInterfaces: fileAnalysis.interfaces.length > 0,
     hasImplementations: fileAnalysis.implementations.length > 0,
+    conventions,
   }
 }
 
@@ -879,6 +883,182 @@ function extractPublicMethods(content, language) {
   return methods
 }
 
+// ─── Convention Detection ─────────────────────────────────────────────────────
+
+/**
+ * Classifies a single identifier into a naming style bucket.
+ * Single-word identifiers (no separator or case change) return null — unclassifiable.
+ * @param {string} name
+ * @returns {'camelCase'|'PascalCase'|'snake_case'|'SCREAMING_SNAKE_CASE'|'kebab-case'|null}
+ */
+function classifyNameStyle(name) {
+  if (!name || name.length === 0) return null
+  if (/^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(name)) return 'SCREAMING_SNAKE_CASE'
+  if (/^[A-Z][a-zA-Z0-9]*$/.test(name) && /[a-z]/.test(name)) return 'PascalCase'
+  if (/^[a-z][a-zA-Z0-9]*$/.test(name) && !name.includes('_') && /[A-Z]/.test(name)) return 'camelCase'
+  if (/^[a-z][a-z0-9_]*$/.test(name) && name.includes('_')) return 'snake_case'
+  if (/^[a-z][a-z0-9-]*$/.test(name) && name.includes('-')) return 'kebab-case'
+  return null  // single word, mixed, or other — not classifiable
+}
+
+/**
+ * Classifies an import path into an import style bucket.
+ * @param {string} importPath
+ * @returns {'relative-with-extension'|'relative-bare'|'absolute-bare'|null}
+ */
+function classifyImportStyle(importPath) {
+  if (!importPath) return null
+  if (importPath.startsWith('.') && importPath.endsWith('.js')) return 'relative-with-extension'
+  if (importPath.startsWith('.') && !importPath.endsWith('.js')) return 'relative-bare'
+  if (!importPath.startsWith('.') && !importPath.startsWith('/')) return 'absolute-bare'
+  return null
+}
+
+/**
+ * Returns the dominant style from a tally map if it meets the minimum threshold.
+ * @param {Object} tally - { styleName: count }
+ * @param {number} minSamples - Minimum total samples required (default 5)
+ * @param {number} minRatio - Minimum proportion for dominant style (default 0.6)
+ * @returns {string|null} Dominant style name or null
+ */
+function dominantStyle(tally, minSamples = 5, minRatio = 0.6) {
+  const entries = Object.entries(tally)
+  if (entries.length === 0) return null
+  const total = entries.reduce((sum, [, count]) => sum + count, 0)
+  if (total < minSamples) return null
+  const sorted = entries.sort((a, b) => b[1] - a[1])
+  if (sorted[0][1] / total >= minRatio) return sorted[0][0]
+  return null
+}
+
+/**
+ * Detects naming conventions per folder from deep analysis results and code file list.
+ * Applies 5-sample / 60%-ratio threshold before reporting any dimension.
+ * Multi-language folders are handled by grouping per language.
+ * @param {Object[]} deepAnalysis - Array of file analysis objects from analyzeFileContents
+ * @param {string[]} codeFiles - Array of code file basenames (already CODE_EXTENSIONS filtered)
+ * @returns {Object|null} Conventions object or null if no dimension meets threshold
+ */
+function detectConventions(deepAnalysis, codeFiles) {
+  const byLanguage = {}
+
+  // Group deepAnalysis entries by language
+  for (const fa of deepAnalysis) {
+    if (fa.error) continue
+    const lang = fa.language || 'unknown'
+    if (!byLanguage[lang]) byLanguage[lang] = []
+    byLanguage[lang].push(fa)
+  }
+
+  const perLangResults = []
+
+  for (const [lang, entries] of Object.entries(byLanguage)) {
+    const mTally = {}
+    const mExamples = {}
+    const cTally = {}
+    const cExamples = {}
+
+    for (const fa of entries) {
+      for (const method of (fa.methods || [])) {
+        const style = classifyNameStyle(method.name)
+        if (!style) continue
+        mTally[style] = (mTally[style] || 0) + 1
+        if (!mExamples[style]) mExamples[style] = method.name
+      }
+      if (fa.className) {
+        const style = classifyNameStyle(fa.className)
+        if (style) {
+          cTally[style] = (cTally[style] || 0) + 1
+          if (!cExamples[style]) cExamples[style] = fa.className
+        }
+      }
+    }
+
+    const mStyle = dominantStyle(mTally)
+    const cStyle = dominantStyle(cTally)
+
+    perLangResults.push({
+      lang,
+      methods: mStyle ? { style: mStyle, example: mExamples[mStyle], lang } : null,
+      classes: cStyle ? { style: cStyle, example: cExamples[cStyle], lang } : null,
+    })
+  }
+
+  // Flatten: if single language, use plain style; if multiple languages with same style, collapse
+  let methodResult = null
+  let classResult = null
+
+  const methodResults = perLangResults.filter(r => r.methods !== null)
+  const classResults = perLangResults.filter(r => r.classes !== null)
+
+  if (methodResults.length === 1) {
+    methodResult = { style: methodResults[0].methods.style, example: methodResults[0].methods.example }
+  } else if (methodResults.length > 1) {
+    const allSameStyle = methodResults.every(r => r.methods.style === methodResults[0].methods.style)
+    if (allSameStyle) {
+      methodResult = { style: methodResults[0].methods.style, example: methodResults[0].methods.example }
+    } else {
+      methodResult = methodResults.map(r => ({
+        style: r.methods.style,
+        example: r.methods.example,
+        lang: r.lang,
+      }))
+    }
+  }
+
+  if (classResults.length === 1) {
+    classResult = { style: classResults[0].classes.style, example: classResults[0].classes.example }
+  } else if (classResults.length > 1) {
+    const allSameStyle = classResults.every(r => r.classes.style === classResults[0].classes.style)
+    if (allSameStyle) {
+      classResult = { style: classResults[0].classes.style, example: classResults[0].classes.example }
+    } else {
+      classResult = classResults.map(r => ({
+        style: r.classes.style,
+        example: r.classes.example,
+        lang: r.lang,
+      }))
+    }
+  }
+
+  // File naming — from codeFiles list (already CODE_EXTENSIONS filtered)
+  const fTally = {}
+  const fExamples = {}
+  for (const filename of (codeFiles || [])) {
+    const stem = basename(filename, extname(filename))
+    const style = classifyNameStyle(stem)
+    if (!style) continue
+    fTally[style] = (fTally[style] || 0) + 1
+    if (!fExamples[style]) fExamples[style] = filename
+  }
+  const fileStyle = dominantStyle(fTally)
+  const fileResult = fileStyle ? { style: fileStyle, example: fExamples[fileStyle] } : null
+
+  // Import style — from all deepAnalysis imports
+  const iTally = {}
+  const iExamples = {}
+  for (const fa of deepAnalysis) {
+    if (fa.error || !fa.imports) continue
+    for (const imp of fa.imports) {
+      const style = classifyImportStyle(imp)
+      if (!style) continue
+      iTally[style] = (iTally[style] || 0) + 1
+      if (!iExamples[style]) iExamples[style] = imp
+    }
+  }
+  const importStyle = dominantStyle(iTally)
+  const importResult = importStyle ? { style: importStyle, example: iExamples[importStyle] } : null
+
+  // Build result — omit null dimensions
+  const result = {}
+  if (methodResult) result.methods = methodResult
+  if (classResult)  result.classes = classResult
+  if (fileResult)   result.files   = fileResult
+  if (importResult) result.imports = importResult
+
+  return Object.keys(result).length > 0 ? result : null
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function extractMatches(content, regex) {
@@ -999,4 +1179,5 @@ function inferRoleFromFiles(fileAnalysis) {
 }
 
 // ─── Test Exports (used only by tests/phase1/) ───────────────────────────────
-export { getLineNumber, analyzeJava, analyzeKotlin, analyzeTypeScriptOrJs, analyzePython, analyzeGo }
+export { getLineNumber, analyzeJava, analyzeKotlin, analyzeTypeScriptOrJs, analyzePython, analyzeGo,
+         detectConventions, classifyNameStyle, dominantStyle }
