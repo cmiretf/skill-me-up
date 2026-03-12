@@ -1,12 +1,12 @@
 <br/>
 
 <pre style="color: red; line-height: 1.4">
-███████╗██╗  ██╗██╗██╗     ██╗     ███╗  ███╗███████╗  ██╗   ██╗██████╗
-██╔════╝██║ ██╔╝██║██║     ██║     ██╔████╔██║██╔════╝  ██║   ██║██╔══██╗
-███████╗█████╔╝ ██║██║     ██║     ██║╚██╔╝██║█████╗    ██║   ██║██████╔╝
-╚════██║██╔═██╗ ██║██║     ██║     ██║ ╚═╝ ██║██╔══╝    ██║   ██║██╔═══╝
-███████║██║  ██╗██║███████╗███████╗██║     ██║███████╗  ╚██████╔╝██║
-╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝   ╚═════╝ ╚═╝
+███████╗██╗  ██╗██╗██╗     ██╗        ███╗  ███╗███████╗    ██╗   ██╗██████╗
+██╔════╝██║ ██╔╝██║██║     ██║        ██╔████╔██║██╔════╝   ██║   ██║██╔══██╗
+███████╗█████╔╝ ██║██║     ██║        ██║╚██╔╝██║█████╗     ██║   ██║██████╔╝
+╚════██║██╔═██╗ ██║██║     ██║        ██║ ╚═╝ ██║██╔══╝     ██║   ██║██╔═══╝
+███████║██║  ██╗██║███████╗███████╗   ██║     ██║███████╗   ╚██████╔╝██║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝   ╚═╝     ╚═╝╚══════╝    ╚═════╝ ╚═╝
 </pre>
 
 <br/>
@@ -71,14 +71,18 @@ Each generated file includes sections like:
 
 ```markdown
 # controller/ — Agent Instructions
+
 > Project: my-app | Language: Java | Framework: Spring Boot
 
 ## Overview
+
 **Role:** HTTP / Presentation Layer
 
 ## Classes & Interfaces
+
 ### UserController.java
-- **Type:** class  **Annotations:** @RestController, @RequestMapping
+
+- **Type:** class **Annotations:** @RestController, @RequestMapping
 - **Methods:**
   | Method | Parameters | Returns | Annotations |
   |--------|------------|---------|-------------|
@@ -86,34 +90,37 @@ Each generated file includes sections like:
   | createUser | User body | ResponseEntity<User> | @PostMapping, @RequestBody |
 
 ## Key Patterns
+
 - REST API (Spring @RestController)
 - Dependency Injection (@Autowired)
 
 ## How to Add New Code Here
+
 1. Create a new class annotated with @RestController
 2. Inject dependencies via constructor with @Autowired
 3. Map endpoints using @GetMapping / @PostMapping / @PutMapping / @DeleteMapping
 4. Delegate all business logic to the service layer — never put it here
 
 ## Dependencies
+
 - com.example.service (UserService)
 - com.example.model (User)
 ```
 
 ## Supported Languages & Frameworks
 
-| Language | Auto-detected frameworks |
-|----------|--------------------------|
-| Java | Spring Boot, Spring MVC, Quarkus, Micronaut, Maven, Gradle |
-| Kotlin | Spring Boot, Gradle |
-| TypeScript | Angular, NestJS, Node.js |
-| JavaScript | React, Vue, Next.js, Nuxt, Svelte, Express, Fastify |
-| Python | Django, FastAPI, Flask |
-| Go | Gin, Echo, Fiber |
-| Rust | Actix, Axum |
-| PHP | Laravel, Symfony |
-| Ruby | Rails, Sinatra |
-| C# | ASP.NET Core |
+| Language   | Auto-detected frameworks                                   |
+| ---------- | ---------------------------------------------------------- |
+| Java       | Spring Boot, Spring MVC, Quarkus, Micronaut, Maven, Gradle |
+| Kotlin     | Spring Boot, Gradle                                        |
+| TypeScript | Angular, NestJS, Node.js                                   |
+| JavaScript | React, Vue, Next.js, Nuxt, Svelte, Express, Fastify        |
+| Python     | Django, FastAPI, Flask                                     |
+| Go         | Gin, Echo, Fiber                                           |
+| Rust       | Actix, Axum                                                |
+| PHP        | Laravel, Symfony                                           |
+| Ruby       | Rails, Sinatra                                             |
+| C#         | ASP.NET Core                                               |
 
 ## Patterns detected
 
@@ -121,20 +128,20 @@ Each generated file includes sections like:
 
 **Folder patterns**
 
-| Pattern | Keywords |
-|---------|----------|
-| Controller / HTTP Layer | `controller`, `handler`, `routes`, `router` |
-| Service / Business Logic | `service`, `usecase`, `application` |
-| DAO / Repository | `dao`, `repository`, `persistence`, `store` |
-| Model / Entity | `model`, `entity`, `dto`, `schema`, `domain` |
-| Middleware | `middleware`, `interceptor`, `guard`, `filter` |
-| Config | `config`, `settings`, `environment` |
-| Utilities | `utils`, `helpers`, `shared`, `lib` |
-| UI Components | `components`, `ui`, `widgets` |
-| Pages / Screens | `pages`, `views`, `screens` |
-| State Management | `store`, `redux`, `pinia`, `context` |
-| Composables / Hooks | `composables`, `hooks` |
-| Tests | `test`, `spec`, `e2e` |
+| Pattern                  | Keywords                                       |
+| ------------------------ | ---------------------------------------------- |
+| Controller / HTTP Layer  | `controller`, `handler`, `routes`, `router`    |
+| Service / Business Logic | `service`, `usecase`, `application`            |
+| DAO / Repository         | `dao`, `repository`, `persistence`, `store`    |
+| Model / Entity           | `model`, `entity`, `dto`, `schema`, `domain`   |
+| Middleware               | `middleware`, `interceptor`, `guard`, `filter` |
+| Config                   | `config`, `settings`, `environment`            |
+| Utilities                | `utils`, `helpers`, `shared`, `lib`            |
+| UI Components            | `components`, `ui`, `widgets`                  |
+| Pages / Screens          | `pages`, `views`, `screens`                    |
+| State Management         | `store`, `redux`, `pinia`, `context`           |
+| Composables / Hooks      | `composables`, `hooks`                         |
+| Tests                    | `test`, `spec`, `e2e`                          |
 
 **Code-level patterns (detected from source)**
 
