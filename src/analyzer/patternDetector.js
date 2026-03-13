@@ -26,13 +26,19 @@ export function detectFolderPattern(folderInfo) {
   const detectedPatterns = detectArchitecturalPatterns(deepAnalysis)
 
   // Extract cross-folder dependencies from imports
-  const dependencies = extractDependencies(deepAnalysis, folderInfo.relativePath)
+  const dependencies = extractDependencies(deepAnalysis, folderInfo.relativePath, folderInfo.path)
 
   // Generate contextual "how to add" instructions
   const howToAdd = generateHowToAdd(deepAnalysis, detectedPatterns, matched)
 
   // Detect naming conventions per folder (ENRICH-02)
   const conventions = detectConventions(deepAnalysis, folderInfo.codeFiles)
+
+  // Extract usage examples from public methods (ENRICH-03)
+  const examples = extractExamples(deepAnalysis, folderInfo.path, folderInfo.relativePath)
+
+  // Detect antipatterns heuristically (ENRICH-04)
+  const antipatterns = detectAntipatterns(deepAnalysis, folderInfo.path)
 
   return {
     pattern: matched || null,
@@ -47,6 +53,8 @@ export function detectFolderPattern(folderInfo) {
     hasInterfaces: fileAnalysis.interfaces.length > 0,
     hasImplementations: fileAnalysis.implementations.length > 0,
     conventions,
+    examples,
+    antipatterns,
   }
 }
 
@@ -248,6 +256,7 @@ function analyzeTypeScriptOrJs(content, file) {
       returnType: '',
       annotation: null,
       lineNumber: getLineNumber(content, fn.index),
+      isPublic: true,
     })
   }
 
@@ -640,7 +649,64 @@ function detectArchitecturalPatterns(deepAnalysis) {
 
 // ─── Dependency Extraction ───────────────────────────────────────────────────
 
-function extractDependencies(deepAnalysis, currentRelativePath) {
+const NODE_BUILTINS = {
+  fs: 'file system reads/writes',
+  path: 'path manipulation',
+  os: 'OS info',
+  http: 'HTTP server/client',
+  https: 'HTTPS requests',
+  crypto: 'cryptographic operations',
+  util: 'Node.js utilities',
+  events: 'event emitter',
+  stream: 'stream processing',
+  url: 'URL parsing/formatting',
+  child_process: 'spawning child processes',
+  readline: 'line-by-line input',
+  net: 'TCP/IPC networking',
+  buffer: 'binary data handling',
+  querystring: 'query string parsing',
+}
+
+function inferDepRole(depPath, allDeepAnalysis, folderPath) {
+  const segment = depPath.split('/').pop().replace(/\.\w+$/, '')
+  if (NODE_BUILTINS[segment]) return NODE_BUILTINS[segment]
+
+  // Call-site scan: extract named import bindings from file content
+  const escapedPath = depPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const namedImportRe = new RegExp(
+    `import\\s+\\{([^}]+)\\}\\s+from\\s+['"]${escapedPath}['"]`
+  )
+  const calledNames = new Set()
+  for (const fa of allDeepAnalysis) {
+    if (!fa.imports) continue
+    const imports = fa.imports || []
+    if (!imports.some(imp => imp === depPath || imp.endsWith('/' + segment))) continue
+
+    // Resolve file content: prefer fa.content (fixture/cached), fallback to readFileSync
+    let content = fa.content || null
+    if (!content && folderPath && fa.file) {
+      try { content = readFileSync(join(folderPath, fa.file), 'utf8') } catch (_) {}
+    }
+    if (!content) continue
+
+    const m = content.match(namedImportRe)
+    if (m) {
+      m[1].split(',')
+        .map(n => n.trim().split(/\s+as\s+/)[0].trim())
+        .filter(Boolean)
+        .forEach(n => calledNames.add(n))
+    }
+  }
+
+  if (calledNames.size > 0) {
+    return [...calledNames].slice(0, 3).join(', ')
+  }
+
+  // Fallback: derive from path segment
+  return segment.replace(/[-_]/g, ' ')
+}
+
+export function extractDependencies(deepAnalysis, currentRelativePath, folderPath) {
   const deps = new Set()
   const currentParts = currentRelativePath.split('/')
 
@@ -661,14 +727,14 @@ function extractDependencies(deepAnalysis, currentRelativePath) {
           }
         }
       }
-      // For JS/TS: relative imports like '../service/userService'
+      // For JS/TS: relative imports and bare package/builtin imports
       else if (fa.language === 'JavaScript' || fa.language === 'TypeScript') {
         if (imp.startsWith('.')) {
-          const parts = imp.split('/')
-          const parentRef = parts.find((p, i) => p !== '.' && p !== '..' && i < parts.length - 1)
-          if (parentRef && parentRef !== currentParts[currentParts.length - 1]) {
-            deps.add(parentRef)
-          }
+          // Relative import: keep full path for role inference
+          deps.add(imp)
+        } else {
+          // Non-relative: builtin or npm package (e.g. 'fs', 'path', 'express')
+          deps.add(imp)
         }
       }
       // For Python: from package.module import ...
@@ -704,7 +770,10 @@ function extractDependencies(deepAnalysis, currentRelativePath) {
     }
   }
 
-  return [...deps].sort()
+  return [...deps].sort().map(dep => ({
+    path: dep,
+    role: inferDepRole(dep, deepAnalysis, folderPath)
+  }))
 }
 
 // ─── How To Add Instructions ─────────────────────────────────────────────────
@@ -1176,6 +1245,297 @@ function inferRoleFromFiles(fileAnalysis) {
   if (interfaces.length > 0) return 'Interface / Contract Layer'
   if (models.length > 0) return 'Data Model Layer'
   return 'General Module'
+}
+
+// ─── Usage Examples Extraction (ENRICH-03) ───────────────────────────────────
+
+/**
+ * Removes minimum leading whitespace from all non-empty lines (dedent).
+ * @param {string[]} lines
+ * @returns {string[]}
+ */
+function dedent(lines) {
+  const nonEmpty = lines.filter(l => l.trim().length > 0)
+  if (nonEmpty.length === 0) return lines
+  const minIndent = Math.min(...nonEmpty.map(l => l.match(/^(\s*)/)[1].length))
+  return lines.map(l => l.slice(minIndent))
+}
+
+/**
+ * Extracts a method body starting at the given 1-based line number.
+ * Uses brace-depth walking. Handles expression-body arrows (no braces).
+ * @param {string} content - Full file content
+ * @param {number} startLineNumber - 1-based line number of the method signature
+ * @param {number} maxLines - Maximum lines to capture (default 15)
+ * @returns {string[]} Dedented snippet lines
+ */
+function extractMethodBody(content, startLineNumber, maxLines = 15) {
+  const lines = content.split('\n')
+  const startIdx = startLineNumber - 1 // 0-indexed
+  if (startIdx < 0 || startIdx >= lines.length) return []
+
+  const slice = []
+  let depth = 0
+  let bodyStarted = false
+  let foundBrace = false
+
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i]
+    slice.push(line)
+
+    for (const ch of line) {
+      if (ch === '{') { depth++; foundBrace = true; bodyStarted = true }
+      if (ch === '}') { depth-- }
+    }
+
+    // Expression-body arrow: first line pushed, no brace found yet
+    if (slice.length === 1 && !foundBrace) {
+      return dedent([line])
+    }
+
+    // Body closed
+    if (bodyStarted && depth === 0) break
+
+    // Reached max lines limit
+    if (slice.length >= maxLines) {
+      if (depth > 0) slice.push('  // ... (truncated)')
+      break
+    }
+  }
+
+  return dedent(slice)
+}
+
+/**
+ * Extracts up to 2 code examples from public methods in deepAnalysis entries.
+ * @param {Object[]} deepAnalysis - Array of file analysis objects
+ * @param {string} folderPath - Absolute path to folder
+ * @param {string} [folderRelativePath=''] - Relative path prefix for relativePath construction
+ * @returns {Object[]} Array of { methodName, relativePath, lineNumber, lang, snippet }
+ */
+export function extractExamples(deepAnalysis, folderPath, folderRelativePath = '') {
+  if (!deepAnalysis || deepAnalysis.length === 0) return []
+
+  const examples = []
+
+  for (const fa of deepAnalysis) {
+    if (examples.length >= 2) break
+    if (fa.error) continue
+    if (!fa.methods || fa.methods.length === 0) continue
+
+    const publicMethods = fa.methods.filter(m => m.isPublic === true)
+    if (publicMethods.length === 0) continue
+
+    const method = publicMethods[0]
+
+    let content
+    try {
+      content = readFileSync(join(folderPath, fa.file), 'utf8')
+    } catch {
+      continue
+    }
+
+    const snippet = extractMethodBody(content, method.lineNumber)
+    const relPath = folderRelativePath
+      ? join(folderRelativePath, fa.file).replace(/\\/g, '/')
+      : fa.file
+
+    examples.push({
+      methodName: method.name,
+      relativePath: relPath,
+      lineNumber: method.lineNumber,
+      lang: fa.language,
+      snippet,
+    })
+  }
+
+  return examples
+}
+
+// ─── Antipattern Detection ────────────────────────────────────────────────────
+
+// Only matches single-line empty catch: catch(...) { }
+// Multi-line bodies (even if only whitespace/comments) are NOT matched — prevents false positives
+// when the catch body contains only a comment that has been stripped.
+const EMPTY_CATCH_BRACE = /catch\s*\([^)]*\)\s*\{[^\S\n]*\}/
+const EMPTY_EXCEPT = /except[^:]*:\s*\n(\s*(?:pass\s*)?\n|\s*$)/m
+
+/**
+ * Returns true if the file appears to be a "God class" — a class with too many methods.
+ * Skips Go (no classes) and module/script/package classTypes (not OOP classes).
+ * @param {{ language: string, classType: string, methods: Array }} fa
+ * @returns {boolean}
+ */
+function isGodClass(fa) {
+  const noClassLanguages = ['Go']
+  const noClassTypes = ['module', 'script', 'package']
+  if (noClassLanguages.includes(fa.language)) return false
+  if (noClassTypes.includes(fa.classType)) return false
+  return (fa.methods || []).length > 20
+}
+
+/**
+ * Returns true if the file content contains an empty catch/except block.
+ * Go is skipped (no try/catch). Comment-only bodies are NOT flagged (comments stripped first).
+ * @param {string} content
+ * @param {string} language
+ * @returns {boolean}
+ */
+function hasEmptyCatch(content, language) {
+  if (language === 'Go') return false
+  if (language === 'Python') {
+    const stripped = content.replace(/#[^\n]*/g, '')
+    return EMPTY_EXCEPT.test(stripped)
+  }
+  // Strip line comments and block comments before testing
+  const stripped = content.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+  return EMPTY_CATCH_BRACE.test(stripped)
+}
+
+/**
+ * Scans method bodies via brace-depth walking to detect long methods and deep nesting.
+ * Uses already-extracted method line numbers as entry points.
+ * @param {string} content - Full file content
+ * @param {Array<{ lineNumber: number }>} methods - Methods with 1-based line numbers
+ * @returns {{ hasLongMethod: boolean, hasDeepNesting: boolean }}
+ */
+function scanMethodBodies(content, methods) {
+  const lines = content.split('\n')
+  let hasLongMethod = false
+  let hasDeepNesting = false
+
+  for (const method of methods) {
+    if (hasLongMethod && hasDeepNesting) break
+
+    const startIdx = method.lineNumber - 1
+    if (startIdx < 0 || startIdx >= lines.length) continue
+
+    let depth = 0
+    let bodyStarted = false
+    let foundBrace = false
+    let bodyLineCount = 0
+    let maxDepth = 0
+
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i]
+
+      for (const ch of line) {
+        if (ch === '{') {
+          depth++
+          foundBrace = true
+          bodyStarted = true
+        }
+        if (ch === '}') {
+          depth--
+        }
+      }
+
+      if (bodyStarted) {
+        bodyLineCount++
+        maxDepth = Math.max(maxDepth, depth)
+      }
+
+      // Expression-body arrow: first line, no brace — single-line, can't be long/deep
+      if (i === startIdx && !foundBrace) break
+
+      // Body closed
+      if (bodyStarted && depth === 0) break
+    }
+
+    if (bodyLineCount > 40) hasLongMethod = true
+    if (maxDepth > 3) hasDeepNesting = true
+  }
+
+  return { hasLongMethod, hasDeepNesting }
+}
+
+/**
+ * Detects antipatterns across files in deepAnalysis.
+ * Returns an array of { id, label, count } entries when ≥3 files trigger any rule, else null.
+ *
+ * Rules (in output order):
+ *   longMethod   — any function/method body >40 lines
+ *   deepNesting  — brace depth inside any method body >3
+ *   godClass     — class with >20 public methods (skips Go, module/script/package)
+ *   emptyCatch   — empty catch/except body (skips Go, skips comment-only)
+ *
+ * @param {Object[]} deepAnalysis - Array of file analysis objects from analyzeFileContents
+ * @param {string} folderPath - Absolute path to the folder (for reading file content)
+ * @returns {Array<{ id: string, label: string, count: number }>|null}
+ */
+export function detectAntipatterns(deepAnalysis, folderPath) {
+  if (!deepAnalysis || deepAnalysis.length === 0) return null
+
+  const longMethodFiles = new Set()
+  const deepNestingFiles = new Set()
+  const godClassFiles = new Set()
+  const emptyCatchFiles = new Set()
+
+  for (const fa of deepAnalysis) {
+    if (fa.error) continue
+
+    // God class — metadata only, no file read needed
+    if (isGodClass(fa)) godClassFiles.add(fa.file)
+
+    // Content-based rules — read file once and reuse
+    let content
+    try {
+      content = readFileSync(join(folderPath, fa.file), 'utf8')
+    } catch {
+      continue
+    }
+
+    // Empty catch
+    if (hasEmptyCatch(content, fa.language)) emptyCatchFiles.add(fa.file)
+
+    // Long method and deep nesting via brace-depth scan
+    const methods = fa.methods || []
+    if (methods.length > 0) {
+      const { hasLongMethod, hasDeepNesting } = scanMethodBodies(content, methods)
+      if (hasLongMethod) longMethodFiles.add(fa.file)
+      if (hasDeepNesting) deepNestingFiles.add(fa.file)
+    } else {
+      // No pre-extracted methods — scan whole file for function-like openings
+      // Build synthetic method entry points by scanning for '{' at depth 0
+      const lines = content.split('\n')
+      const syntheticMethods = []
+      let topDepth = 0
+      for (let i = 0; i < lines.length; i++) {
+        const prevDepth = topDepth
+        for (const ch of lines[i]) {
+          if (ch === '{') topDepth++
+          if (ch === '}') topDepth--
+        }
+        // A line that opens a top-level block (transitions from depth 0 to depth 1)
+        if (prevDepth === 0 && topDepth > 0) {
+          syntheticMethods.push({ lineNumber: i + 1 })
+        }
+      }
+      if (syntheticMethods.length > 0) {
+        const { hasLongMethod, hasDeepNesting } = scanMethodBodies(content, syntheticMethods)
+        if (hasLongMethod) longMethodFiles.add(fa.file)
+        if (hasDeepNesting) deepNestingFiles.add(fa.file)
+      }
+    }
+  }
+
+  const THRESHOLD = 3
+  const results = []
+
+  const rules = [
+    { set: longMethodFiles,  id: 'longMethod',  label: 'Long methods (>40 lines)' },
+    { set: deepNestingFiles, id: 'deepNesting', label: 'Deep nesting (>3 levels)' },
+    { set: godClassFiles,    id: 'godClass',    label: 'God classes (>20 methods)' },
+    { set: emptyCatchFiles,  id: 'emptyCatch',  label: 'Empty catch blocks' },
+  ]
+
+  for (const rule of rules) {
+    if (rule.set.size >= THRESHOLD) {
+      results.push({ id: rule.id, label: rule.label, count: rule.set.size })
+    }
+  }
+
+  return results.length > 0 ? results : null
 }
 
 // ─── Test Exports (used only by tests/phase1/) ───────────────────────────────

@@ -25,6 +25,7 @@ function buildMarkdown(folderInfo, patternInfo, languageInfo, projectMeta) {
     role, description, agentHint, fileAnalysis,
     hasInterfaces, hasImplementations,
     deepAnalysis, detectedPatterns, dependencies, howToAdd,
+    conventions, examples, antipatterns,
   } = patternInfo
   const { lang, framework } = languageInfo
   const date = new Date().toISOString().split('T')[0]
@@ -47,11 +48,29 @@ function buildMarkdown(folderInfo, patternInfo, languageInfo, projectMeta) {
   sections.push('')
 
   // ─── Project Conventions ─────────────────────────────────────────────────
-  if (patternInfo.conventions) {
-    const conventionsContent = buildConventionsSection(patternInfo.conventions)
+  if (conventions) {
+    const conventionsContent = buildConventionsSection(conventions)
     if (conventionsContent) {
       sections.push('## Project Conventions')
       sections.push(conventionsContent)
+      sections.push('')
+    }
+  }
+
+  // ─── Usage Examples ───────────────────────────────────────────────────────
+  if (examples) {
+    const examplesContent = buildUsageExamplesSection(examples)
+    if (examplesContent) {
+      sections.push(examplesContent)
+      sections.push('')
+    }
+  }
+
+  // ─── Don't Do (ANTIPATTERNS) ─────────────────────────────────────────────
+  if (antipatterns) {
+    const dontDoContent = buildDontDoSection(antipatterns)
+    if (dontDoContent) {
+      sections.push(dontDoContent)
       sections.push('')
     }
   }
@@ -135,7 +154,7 @@ function buildMarkdown(folderInfo, patternInfo, languageInfo, projectMeta) {
     sections.push('This folder imports from / depends on the following packages or folders:')
     sections.push('')
     for (const dep of dependencies) {
-      sections.push(`- \`${dep}\``)
+      sections.push(`- \`${dep.path}\` — ${dep.role}`)
     }
     sections.push('')
   }
@@ -265,6 +284,78 @@ function buildFilesSection(fileAnalysis, allCodeFiles) {
   return lines.join('\n')
 }
 
+// ─── Language → Fence Tag Map ─────────────────────────────────────────────────
+
+const LANG_FENCE = {
+  JavaScript: 'js',
+  TypeScript: 'ts',
+  Java: 'java',
+  Kotlin: 'kotlin',
+  Python: 'python',
+  Go: 'go',
+  'C#': 'csharp',
+  PHP: 'php',
+  Ruby: 'ruby',
+}
+
+// ─── Usage Examples Section ───────────────────────────────────────────────────
+
+/**
+ * Renders the ## Usage Examples section from extracted examples data.
+ * Returns null when examples is null or empty — caller must check before pushing.
+ * Groups by language with sub-headers only when multiple languages are present.
+ * @param {Object[]|null} examples - Array from extractExamples(), or null/[]
+ * @returns {string|null} Rendered section string (including header) or null
+ */
+function buildUsageExamplesSection(examples) {
+  if (!examples || examples.length === 0) return null
+  const lines = []
+  lines.push('## Usage Examples')
+  lines.push('')
+  const byLang = {}
+  for (const ex of examples) {
+    const lang = ex.lang || 'unknown'
+    if (!byLang[lang]) byLang[lang] = []
+    byLang[lang].push(ex)
+  }
+  const langs = Object.keys(byLang)
+  for (const lang of langs) {
+    if (langs.length > 1) { lines.push(`#### ${lang}`); lines.push('') }
+    for (const ex of byLang[lang]) {
+      const fence = LANG_FENCE[lang] || ''
+      lines.push(`### ${ex.methodName}`)
+      lines.push(`See: \`${ex.relativePath}:${ex.lineNumber}\``)
+      lines.push('')
+      lines.push(`\`\`\`${fence}`)
+      lines.push(...ex.snippet)
+      lines.push('```')
+      lines.push('')
+    }
+  }
+  return lines.length > 0 ? lines.join('\n') : null
+}
+
+// ─── Don't Do Section ────────────────────────────────────────────────────────
+
+/**
+ * Renders the ## Don't Do section from heuristically detected antipatterns.
+ * Returns null when antipatterns is null or empty — caller must check before pushing.
+ * @param {Object[]|null} antipatterns - Array from detectAntipatterns(), or null/[]
+ * @returns {string|null} Rendered section string (including header) or null
+ */
+function buildDontDoSection(antipatterns) {
+  if (!antipatterns || antipatterns.length === 0) return null
+  const lines = []
+  lines.push("## Don't Do")
+  lines.push('')
+  lines.push('> Heuristically detected — review before treating as authoritative.')
+  lines.push('')
+  for (const ap of antipatterns) {
+    lines.push(`- **${ap.label}**: found in ${ap.count} file${ap.count === 1 ? '' : 's'}`)
+  }
+  return lines.join('\n')
+}
+
 // ─── Project Conventions Section ─────────────────────────────────────────────
 
 /**
@@ -328,4 +419,4 @@ function truncate(str, maxLen) {
 }
 
 // ─── Test Exports ─────────────────────────────────────────────────────────────
-export { buildConventionsSection }
+export { buildConventionsSection, buildUsageExamplesSection, buildDontDoSection }

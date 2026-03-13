@@ -1,1 +1,5 @@
 settings.local.json
+
+node_modules/
+agent_*
+CLAUDE.md
