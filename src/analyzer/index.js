@@ -2,6 +2,7 @@ import { scanStructure } from './structureAnalyzer.js'
 import { detectLanguage } from './languageDetector.js'
 import { detectFolderPattern } from './patternDetector.js'
 import { generateInstructions } from '../generators/mdGenerator.js'
+import { generateLLMInstructions } from '../generators/llmGenerator.js'
 import { readFileSync, existsSync } from 'fs'
 import { join, basename } from 'path'
 
@@ -13,7 +14,7 @@ import { join, basename } from 'path'
  * @param {boolean} [options.verbose] - Print progress to stdout
  */
 export async function analyze(projectPath, options = {}) {
-  const { maxDepth, verbose = true } = options
+  const { maxDepth, verbose = true, llm, llmModel } = options
 
   log(verbose, `\n🔍 skill-me-up — Analyzing project at: ${projectPath}\n`)
 
@@ -47,7 +48,11 @@ export async function analyze(projectPath, options = {}) {
     log(verbose, `  ✓  ${folder.relativePath}/agent_${folder.name.toLowerCase()}_instructions.md`)
   }
 
-  log(verbose, `\n✅ Done! Generated ${generated.length} instruction file(s).\n`)
+  if (llm) {
+    await generateLLMInstructions(generated, folders, { llmModel, verbose })
+  } else {
+    log(verbose, `\n✅ Done! Generated ${generated.length} instruction file(s).\n`)
+  }
 
   return { generated, skipped }
 }

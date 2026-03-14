@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-13T17:10:47.723Z"
+stopped_at: "Completed 05-llm-generation-03-PLAN.md — checkpoint:human-verify pending"
+last_updated: "2026-03-13T23:15:20.737Z"
 last_activity: 2026-03-13 — Plan 03-W0 complete; 11 RED test stubs created in tests/phase3/ for ENRICH-04 and OUTPUT-03
 progress:
-  total_phases: 4
-  completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
+  total_phases: 5
+  completed_phases: 4
+  total_plans: 14
+  completed_plans: 14
   percent: 75
 ---
 
@@ -58,6 +58,10 @@ Progress: [████████░░] 75%
 | Phase 03-antipattern-detection PW0 | 15 | 2 tasks | 2 files |
 | Phase 03-antipattern-detection P01 | 20 | 1 tasks | 1 files |
 | Phase 03-antipattern-detection P02 | 15 | 2 tasks | 2 files |
+| Phase 05-llm-generation P01 | 8 | 1 tasks | 2 files |
+| Phase 05-llm-generation P02 | 15 | 1 tasks | 1 files |
+| Phase 05-llm-generation PW0 | 10 | 2 tasks | 2 files |
+| Phase 05-llm-generation P03 | 5 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -93,6 +97,19 @@ Recent decisions affecting current work:
 - [Phase 03-antipattern-detection]: buildDontDoSection includes ## Don't Do header in return value — not in buildMarkdown, consistent with buildUsageExamplesSection contract
 - [Phase 03-antipattern-detection]: antipatterns field added as last field in detectFolderPattern() return object — additive, no breaking changes
 - [Phase 03-antipattern-detection]: Section omitted entirely when antipatterns is null or [] — null check guards both cases
+- [Phase 05-llm-generation]: GITHUB_TOKEN checked before --llm-model in validation order — token missing is more actionable error
+- [Phase 05-llm-generation]: Model list hardcoded in CLI error — avoids network call, consistent with zero-dependency constraint
+- [Phase 05-llm-generation]: No llmGenerator import in cli.js — LLM wiring deferred to Plan 03 via analyzer/index.js
+- [Phase 05-llm-generation]: parseResponse throws Error on missing folder — fail-hard locked design
+- [Phase 05-llm-generation]: llmGenerator uses only Node.js builtins (fs, path) and global fetch — zero new npm dependencies
+- [Phase 05-llm-generation]: cli.test.js uses spawnSync instead of dynamic import — bin/cli.js executes immediately on import, making child_process spawning the only safe test strategy
+- [Phase 05-llm-generation]: llmGenerator.test.js wraps import in try/catch — module does not exist yet, catch keeps functions undefined so guard clauses produce assertion failures
+- [Phase 05-llm-generation]: LLM branch placed after static for-loop but before return — static output always written first, LLM enriches in-place
+- [Phase 05-llm-generation]: else branch preserves original summary line for non-LLM mode — static path output unchanged
+
+### Roadmap Evolution
+
+- Phase 5 added: LLM Generation — --llm flag to generate markdown via external LLM API instead of templates
 
 ### Pending Todos
 
@@ -105,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T17:08:15.576Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-13T23:15:20.732Z
+Stopped at: Completed 05-llm-generation-03-PLAN.md — checkpoint:human-verify pending
 Resume file: None

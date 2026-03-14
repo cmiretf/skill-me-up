@@ -16,6 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Usage Examples** - Extract real code examples and upgrade cross-folder dependency descriptions (completed 2026-03-12)
 - [x] **Phase 3: Antipattern Detection** - Detect and surface "Don't Do" patterns with confidence thresholds (completed 2026-03-13)
 - [ ] **Phase 4: Output Quality** - Enforce 300-line budget, add timestamps, and validate with regression fixtures
+- [x] **Phase 5: LLM Generation** - Add --llm flag to rewrite all folder docs via GitHub Models API in one call (completed 2026-03-13)
 
 ## Phase Details
 
@@ -76,10 +77,22 @@ Plans:
   4. Re-running `npx skill-me-up` on the same project produces identical output (idempotency preserved after all enrichments)
 **Plans**: TBD
 
+### Phase 5: LLM Generation
+**Goal**: The CLI accepts a `--llm --llm-model <name>` flag pair that, after the static pipeline writes all folder docs, sends them all to the GitHub Models API in one call and overwrites the files with LLM-rewritten content
+**Requirements**: LLM-B1 through LLM-B6 (tracked in 05-VALIDATION.md)
+**Depends on**: Phase 4
+**Plans**: 4 plans
+
+Plans:
+- [ ] 05-W0-PLAN.md — Test scaffold: RED stubs for cli validation (LLM-B1, LLM-B2) and llmGenerator core (LLM-B3, LLM-B4, LLM-B5)
+- [ ] 05-01-PLAN.md — CLI flags: --llm and --llm-model parsing + GITHUB_TOKEN and model validation in bin/cli.js
+- [ ] 05-02-PLAN.md — LLM module: estimateTokens, parseResponse, generateLLMInstructions in src/generators/llmGenerator.js
+- [ ] 05-03-PLAN.md — Integration: wire generateLLMInstructions into src/analyzer/index.js + human verify (LLM-B6)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -87,3 +100,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. Usage Examples | 3/3 | Complete   | 2026-03-12 |
 | 3. Antipattern Detection | 3/3 | Complete   | 2026-03-13 |
 | 4. Output Quality | 0/? | Not started | - |
+| 5. LLM Generation | 4/4 | Complete   | 2026-03-13 |

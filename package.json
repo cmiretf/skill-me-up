@@ -1,6 +1,6 @@
 {
   "name": "skill-me-up",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Analyzes code projects and generates agent-ready instructions.md files inside each key folder",
   "type": "module",
   "main": "src/analyzer/index.js",
