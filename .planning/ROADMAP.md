@@ -75,7 +75,12 @@ Plans:
   2. Every generated `.md` file contains a generation timestamp comment (`<!-- generated: YYYY-MM-DD -->`) at the top
   3. The project ships with at least 2 fixture projects (in different languages) and snapshot tests that fail if generated output deviates from the expected snapshots
   4. Re-running `npx skill-me-up` on the same project produces identical output (idempotency preserved after all enrichments)
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 04-W0-PLAN.md — Test scaffold: RED stubs for truncation/timestamp (QUALITY-01, QUALITY-02) + fixture projects (QUALITY-03)
+- [ ] 04-01-PLAN.md — Timestamp injection + 300-line truncation + buildMarkdown export in mdGenerator.js
+- [ ] 04-02-PLAN.md — Snapshot baselines: generate and commit .snap file for JS and Python fixtures
 
 ### Phase 5: LLM Generation
 **Goal**: The CLI accepts a `--llm --llm-model <name>` flag pair that, after the static pipeline writes all folder docs, sends them all to the GitHub Models API in one call and overwrites the files with LLM-rewritten content
@@ -99,5 +104,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Foundation | 4/4 | Complete   | 2026-03-09 |
 | 2. Usage Examples | 3/3 | Complete   | 2026-03-12 |
 | 3. Antipattern Detection | 3/3 | Complete   | 2026-03-13 |
-| 4. Output Quality | 0/? | Not started | - |
+| 4. Output Quality | 0/3 | Not started | - |
 | 5. LLM Generation | 4/4 | Complete   | 2026-03-13 |

@@ -92,7 +92,7 @@ describe('OUTPUT-01: buildMarkdown conventions placement', () => {
     }
   })
 
-  test('generated markdown omits ## Project Conventions entirely when conventions is null', () => {
+  test('generated markdown shows fallback conventions guidance when conventions is null', () => {
     const folderInfo = makeFolderInfo({ path: tmpDir })
     const patternInfo = makePatternInfo(null)
 
@@ -101,10 +101,11 @@ describe('OUTPUT-01: buildMarkdown conventions placement', () => {
     const outputPath = join(tmpDir, 'agent_testfolder_instructions.md')
     const content = readFileSync(outputPath, 'utf8')
 
-    expect(content).not.toContain('## Project Conventions')
+    expect(content).toContain('## Project Conventions')
+    expect(content).toContain('No dominant naming conventions were detected')
   })
 
-  test('generated markdown omits ## Project Conventions entirely when no dimension meets threshold', () => {
+  test('generated markdown shows fallback conventions guidance when no dimension meets threshold', () => {
     // Empty conventions object — no dimensions detected
     const folderInfo = makeFolderInfo({ path: tmpDir })
     const patternInfo = makePatternInfo({})
@@ -114,6 +115,7 @@ describe('OUTPUT-01: buildMarkdown conventions placement', () => {
     const outputPath = join(tmpDir, 'agent_testfolder_instructions.md')
     const content = readFileSync(outputPath, 'utf8')
 
-    expect(content).not.toContain('## Project Conventions')
+    expect(content).toContain('## Project Conventions')
+    expect(content).toContain('No dominant naming conventions were detected')
   })
 })

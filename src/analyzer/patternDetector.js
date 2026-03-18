@@ -42,6 +42,7 @@ export function detectFolderPattern(folderInfo) {
 
   return {
     pattern: matched || null,
+    patternId: matched?.id || null,
     role: matched?.role || inferRoleFromFiles(fileAnalysis),
     description: matched?.description || 'General code folder.',
     agentHint: matched?.agentHint || 'Inspect the files inside to understand specific responsibilities.',
